@@ -98,8 +98,38 @@ fn main() {
         if line.to_lowercase().contains(&target.to_lowercase()) {
             println!("🎯 Found: {}", line);
         }
-}}
+    }}
+    "delete" => {
+        if args.len() < 3 {
+        println!("Usage: cargo run -- delete [number]");
+        return;
+    }
+
+    // 1. Convert the input string to a number (starting from 1 for humans)
+    let target_index: usize = args[2].parse().expect("Invalid number");
+
+    // 2. Read the file
+    let content = std::fs::read_to_string("notes.txt").expect("Could not read file");
+    let mut lines: Vec<&str> = content.lines().collect();
+
+    // 3. Check if the index is valid
+    if target_index == 0 || target_index > lines.len() {
+        println!("❌ Error: Note #{} does not exist.", target_index);
+        return;
+    }
+
+    // 4. Remove the item (we subtract 1 because computers start at 0)
+    lines.remove(target_index - 1);
+
+    // 5. Join the remaining lines back together and save
+    let new_content = lines.join("\n");
+    std::fs::write("notes.txt", new_content).expect("Failed to save changes");
+
+    println!("🗑️ Deleted note #{}", target_index);
+    }
+
         
         _ => println!("Unknown command. Try 'add' or 'list' or 'clear'."),
     }}
+
 
