@@ -22,12 +22,12 @@ fn main() {
 
     // 3. Decide what to do based on the command
     match command.as_str() {
-       "add" => add_note(&args),
-       "list" => list_notes(),
-       "clear" => clear_notes(),
-       "search" => search_notes(&args),
-       "delete" => delete_note(&args),
-       "export" => export_notes(),
+    "add" => add_note(&args),
+    "list" => list_notes(),
+    "clear" => clear_notes(),
+    "search" => search_notes(&args),
+    "delete" => delete_note(&args),
+    "export" => export_notes(),
         _ => println!("Unknown command: '{}'. Use add, list, search, delete, clear, or export.", command),
     }
 }
