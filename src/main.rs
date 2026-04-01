@@ -1,8 +1,19 @@
 use std::env; // To read command line arguments
-use std::fs::OpenOptions; // To open files with specific permissions
-use std::io::Write; // To write data to files
 use chrono::Local;
 use colored::*; // For colored terminal output
+
+
+use serde::{Serialize, Deserialize};
+#[derive(Serialize, Deserialize, Debug)]
+struct Note{
+    timestamp: String,
+    category: String,
+    content: String,
+}
+
+
+
+
 
 fn main() {
     // 1. Collect what the user typed into a list (Vector)
@@ -35,49 +46,83 @@ fn main() {
 
 
     fn add_note(args: &[String]) {
-            if args.len() < 3 {
-                println!("Error: What is the note content?");
-                return;
-            }
-            let note = &args[2];
+        println!("🕵️ DEBUG ARGS: {:?}", args);
+    // 1. Find the category (anything starting with "--")
+    let category = args.iter()
+        .find(|a| a.starts_with("--"))
+        .map(|c| c.trim_start_matches("--"))
+        .unwrap_or("general");
 
-            let timestamp = Local::now().format("%d-%m-%Y %H:%M:%S").to_string();
+    // 2. Grab EVERY word that isn't a flag and join them with spaces!
+    let content = args.iter()
+        .skip(2)
+        .filter(|a| !a.starts_with("-"))
+        .cloned()
+        .collect::<Vec<String>>()
+        .join(" ");
+
+    // 3. Make sure they actually typed something
+    if content.trim().is_empty() {
+        println!("{}", "❌ Error: What is the note content?".red());
+        return;
+    }
+
+    // 4. Create the note
+    let new_note = Note {
+        timestamp: Local::now().format("%d-%m-%Y %H:%M:%S").to_string(),
+        category: category.to_uppercase(),
+        content,
+    };
+
+    // 5. Read the existing notes
+    let mut notes: Vec<Note> = match std::fs::read_to_string("notes.json") {
+        Ok(data) => serde_json::from_str(&data).unwrap_or_else(|_| Vec::new()),
+        Err(_) => Vec::new(),
+    };
+
+    // 6. Add the new note and save
+    notes.push(new_note);
+    let json = serde_json::to_string_pretty(&notes).expect("Failed to serialize");
+    std::fs::write("notes.json", json).expect("Failed to write file");
+
+    println!("✅ Note added to JSON database!");
+}
+        
+    fn list_notes() {
             
-            // Open (or create) notes.txt and append the new note
-            let file_result = OpenOptions::new()
-                .append(true)
-                .create(true)
-                .open("notes.txt");
-            let mut file = match file_result {
-                Ok(f) => f,
-                Err(e) => {
-                    println!("Failed to open notes.txt: {}", e);
+            // Read the whole file and print it
+            let content = std::fs::read_to_string("notes.json")
+                .unwrap_or_else(|_| "[]".to_string());
+            
+            let notes: Vec<Note> = match serde_json::from_str(&content) {
+                Ok(parsed_notes) => parsed_notes,
+                Err(_) => {
+                    println!("{}", "No notes found.".red());
                     return;
                 }
             };
-        writeln!(file, "[{}] {}", timestamp, note).expect("Failed to write note");
-            println!("✅ Note saved!");
-        }
-        
-    fn list_notes() {
-            // Read the whole file and print it
-            let content = std::fs::read_to_string("notes.txt")
-                .unwrap_or_else(|_| String::from("No notes found yet."));
             
-            println!("\n--- {} ---", "Your Digital Journal".bold().cyan());
+            if notes.is_empty() {
+                println!("{}", "Your journal is empty. Add a note first!".yellow());
+                return;
+                }
+            
+                println!("\n--- {} ---", "Your Digital Journal".bold().cyan());
+            
 
 
-        for (i, line) in content.lines().enumerate() {
-        if let Some(pos) = line.find(']') {
-            let (date, note) = line.split_at(pos + 1);
-            // Print the number in yellow, date in grey, note in white
-            println!("{}. {} {}", (i + 1).to_string().yellow(), date.bright_black(), note.white());
-        } else {
-            println!("{}. {}", (i + 1).to_string().yellow(), line);
-        }
+        for (i, note) in notes.iter().enumerate() {
+        println!(
+            "{}. [{}] [{}] {}",
+            (i + 1).to_string().yellow(),
+            note.timestamp.bright_black(),
+            note.category.green().bold(), // Accessing the field directly
+            note.content.white()
+            
+        );
     }
-    
-        }
+}
+        
     
     fn delete_note(args: &[String]) {
     if args.len() < 3 {
@@ -95,36 +140,39 @@ fn main() {
     };
 
     // 2. Read the current notes
-    let content = std::fs::read_to_string("notes.txt").unwrap_or_default();
-    let mut lines: Vec<&str> = content.lines().collect();
+    let content = std::fs::read_to_string("notes.json").unwrap_or_default();
+    let mut notes: Vec<Note> = serde_json::from_str(&content).unwrap_or_default();
 
-    // 3. Safety Check: Is the number within our list?
-    if target_index == 0 || target_index > lines.len() {
-        println!("❌ Error: Note #{} does not exist. (Total notes: {})", target_index, lines.len());
+    // 3. Safety Check: Is the number within the list?
+    if target_index == 0 || target_index > notes.len() {
+        println!("❌ Error: Note #{} does not exist. (Total notes: {})", target_index, notes.len());
         return;
     }
 
     // 4. Remove the item (Human 1 = Computer 0)
-    lines.remove(target_index - 1);
+    if target_index <= notes.len() {
+        let removed = notes.remove(target_index - 1);
+
 
     // 5. Save back to file with clean newlines
-    let mut file = std::fs::File::create("notes.txt").expect("Failed to open file");
-    for line in lines {
-        writeln!(file, "{}", line).expect("Failed to write to file");
+    let json = serde_json::to_string_pretty(&notes).expect("Failed to serialize");
+        std::fs::write("notes.json", json).expect("Failed to write file");
+        
+        println!("🗑️  Note: \"{}\" deleted successfully.", removed.content.red());
+    } else {
+        println!("❌ Error: Note #{} does not exist.", target_index);
     }
-
-    println!("🗑️  Note #{} deleted successfully.", target_index);
 }
 
 
 
-
     fn clear_notes() {
-            match std::fs::remove_file("notes.txt") {
+            match std::fs::remove_file("notes.json") {
                 Ok(_) => println!("✅ All notes cleared!"),
                 Err(_) => println!("clearance failed"),
             }
         }
+
 
     fn search_notes(args: &[String]) {
     if args.len() < 3 {
@@ -134,27 +182,28 @@ fn main() {
     let target = &args[2];
 
     // Read the file. If it doesn't exist, stop here.
-    let content_file = std::fs::read_to_string("notes.txt");
-    let content = match content_file {
-        Ok(c) => c,
-        Err(_) => {
-            println!("No notes found to search through.");
-            return;
-        }
-    };
+    let data = std::fs::read_to_string("notes.json").unwrap_or_else(|_| "[]".to_string());
+let notes: Vec<Note> = serde_json::from_str(&data).unwrap_or_default();
     
     println!("Searching for: '{}'...", target);   
     // Loop through each line in the file
-    for line in content.lines() {
-        if line.to_lowercase().contains(&target.to_lowercase()) {
-            println!("🎯 Found: {}", line);
-        }
+for note in notes {
+    if note.content.to_lowercase().contains(&target.to_lowercase()) || 
+    note.category.to_lowercase().contains(&target.to_lowercase()) {
+    println!("🎯 Found: [{}] [{}] {}", 
+        note.timestamp.bright_black(), 
+        note.category.green(), 
+        note.content
+    );
+}
+}
     }
-    }
+    
 
 fn export_notes() {
-    let content = std::fs::read_to_string("notes.txt").unwrap_or_default();
-    if content.is_empty(){
+    let content = std::fs::read_to_string("notes.json").unwrap_or_default();
+    let notes: Vec<Note> = serde_json::from_str(&content).unwrap_or_default();
+    if notes.is_empty(){
         println!("No notes found to export.");
         return;
     }
@@ -163,24 +212,23 @@ fn export_notes() {
     html.push_str("<style>body { font-family: sans-serif; padding: 50px; background: #fafafa; } .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 600px; margin: auto; } h1 { color: #2c3e50; border-bottom: 2px solid #3498db; } ul { list-style: none; padding: 0; } li { padding: 10px 0; border-bottom: 1px solid #eee; } .date { font-weight: bold; color: #3498db; margin-right: 10px; }</style>");
     html.push_str("</head><body><div class='card'><h1>📝 My Notes</h1><ul>");
 
+    
     let mut count = 0;
-    for line in content.lines() {
-        if line.trim().is_empty() { continue; } // Skip empty lines
-        
+    // Just ONE loop through the notes
+    for note in notes {
         count += 1;
-        if let Some(pos) = line.find(']') {
-            let (date, text) = line.split_at(pos + 1);
-            html.push_str(&format!("<li><span class='date'>{}</span>{}</li>", date, text));
-        } else {
-            html.push_str(&format!("<li>{}</li>", line));
-        }
+        html.push_str(&format!(
+            "<li><span class='date'>[{}]</span> <span class='cat'>[{}]</span> {}</li>", 
+            note.timestamp, note.category, note.content
+        ));
     }
 
     html.push_str("</ul></div></body></html>");
 
-    // CRITICAL: Make sure this write happens!
     std::fs::write("notes.html", &html).expect("Failed to write HTML file");
-    
     println!("✅ Exported {} notes to notes.html", count);
-    }
+}
+    
+
+   
 
